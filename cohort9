@@ -1,0 +1,62 @@
+//declarative
+pipeline{
+    agent any
+    tools{
+        maven "maven3.8.6"
+    }
+    stages{
+        stage("Gitclone"){
+            steps{
+                sh "echo git clone"
+                slackSend message: 'Cloning source-code from Github remote repo'
+                git 'https://github.com/odidia/maven-web-app.git'
+            }
+        }
+        stage("Build src"){
+            steps{
+                sh "echo build src to artifacts"
+                slackSend message: 'Building src to artifacts or packages '
+                sh "mvn package"
+            }
+        }
+        stage("SonarqubeQAtest"){
+            steps{
+                sh "echo test built artifacts for quality test"
+                slackSend message: 'Sonarqube testing for quality test'
+                sh "mvn sonar:sonar"
+            }
+        }
+        stage('UploadtoNexus') {
+            agent {label"node0"}
+            steps {
+                sh 'echo uploading built artifact to Nexus'
+                sh "mvn deploy"
+                slackSend message: 'uploaded built artifacts to Nexus'
+            }
+        }
+        stage("deploytoUAT env"){
+            steps{
+                sh "echo deploy built artifacts to UAT-Tomcat environment"
+                slackSend message: 'Deploying built Artifacts to UAT enviroment for testing'
+                deploy adapters: [tomcat9(credentialsId: 'tomcat-red', path: '', url: 'http://172.31.94.175:8080')], contextPath: null, war: 'target/*.war'
+                
+            }
+        }
+        stage("Approve"){
+            steps{
+                timeout(activity: true, time: 2, unit: 'DAYS') {
+    // some block
+}
+                slackSend message: 'Waiting on Response "Approve or Decline UAT stage"'
+                input 'Approve or Decline'
+            }
+        }
+        stage("Deploy to Prod"){
+            steps{
+                sh "echo deploy built artifacts to Production-Tomcat environment"
+                slackSend message: 'Deploying built Artifacts to Production'
+                deploy adapters: [tomcat9(credentialsId: 'tomcat-red', path: '', url: 'http://172.31.94.175:8080')], contextPath: null, war: 'target/*.war'
+            }
+        }
+    }
+}
